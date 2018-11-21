@@ -1,3 +1,10 @@
+bin/*
+nspr*
+nss*
+
+
+dist/*
+
 # Prerequisites
 *.d
 
