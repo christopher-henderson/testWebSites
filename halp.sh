@@ -36,7 +36,7 @@ clang++ thing.cpp -L dist/Debug/lib/libnss3.dylib -I nss/lib/nss -I nss/lib/util
 
 # And just to be thorough scrape through looking for the right symbol.
 for lib in $(find dist/Debug/lib -name *.dylib); do
-	objdump -D $lib | grep NSS_Init:; 
+	objdump -D $lib | grep Now:; 
 	if [ $? -eq 0 ]
 	then
 		echo "See? It's totally in $lib"
