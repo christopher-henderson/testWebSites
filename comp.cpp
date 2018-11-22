@@ -9,10 +9,10 @@
 
 using namespace mozilla::pkix;
 
-class MyWittleTrustDomain : public TrustDomain {
+class MyWittleTwustDomain : public TrustDomain {
 
 public:
-  MyWittleTrustDomain() {}
+  MyWittleTwustDomain() {}
 	// Determine the level of trust in the given certificate for the given role.
   // This will be called for every certificate encountered during path
   // building.
@@ -25,30 +25,10 @@ public:
   // list of EV roots, then GetCertTrust must result in
   // trustLevel == InheritsTrust instead of trustLevel == TrustAnchor
   // (assuming the candidate cert is not actively distrusted).
-  Result GetCertTrust(EndEntityOrCA endEntityOrCA,
-                              const CertPolicyId& policy,
-                              Input candidateCertDER,
-                              /*out*/ TrustLevel& trustLevel) {
+  Result GetCertTrust(EndEntityOrCA endEntityOrCA, const CertPolicyId& policy, Input candidateCertDER, /*out*/ TrustLevel& trustLevel) {
     std::cout << "GetCertTrust\n";
 		return Success;
 	}
-
-  class IC : public TrustDomain::IssuerChecker {
-   public:
-    // potentialIssuerDER is the complete DER encoding of the certificate to
-    // be checked as a potential issuer.
-    //
-    // If additionalNameConstraints is not nullptr then it must point to an
-    // encoded NameConstraints extension value; in that case, those name
-    // constraints will be checked in addition to any any name constraints
-    // contained in potentialIssuerDER.
-    Result Check(Input potentialIssuerDER,
-                         /*optional*/ const Input* additionalNameConstraints,
-                         /*out*/ bool& keepGoing) {
-      std::cout << "Check\n";
-    	return Success;
-	  }
-  };
 
   // Search for a CA certificate with the given name. The implementation must
   // call checker.Check with the DER encoding of the potential issuer
@@ -98,7 +78,17 @@ public:
   // for it to do so.
   Result FindIssuer(Input encodedIssuerName, IssuerChecker& checker, Time time) {
     std::cout << "FindIssuer\n";
-  	return Result::ERROR_CA_CERT_INVALID;
+    bool keepGoing;
+    auto result = checker.Check(encodedIssuerName, nullptr, keepGoing);
+    if (result != Success) {
+      return result;
+    }
+    if (!keepGoing) {
+      return Success;
+    }
+    std::cout << "the checker goes " << MapResultToName(result) << "\n";
+    std::cout << "the checker thinks that I should " << (keepGoing ? "keep going" : "stop") << "\n";
+  	return Success;
   }
 
   // Called as soon as we think we have a valid chain but before revocation
@@ -161,8 +151,7 @@ public:
   // Return Success if the key size is acceptable,
   // Result::ERROR_INADEQUATE_KEY_SIZE if the key size is not acceptable,
   // or another error code if another error occurred.
-  Result CheckRSAPublicKeyModulusSizeInBits(
-      EndEntityOrCA endEntityOrCA, unsigned int modulusSizeInBits) {
+  Result CheckRSAPublicKeyModulusSizeInBits(EndEntityOrCA endEntityOrCA, unsigned int modulusSizeInBits) {
     std::cout << "CheckRSAModulus\n";
   	return Success;
   }
@@ -174,8 +163,7 @@ public:
   // function, so it is not necessary to repeat those checks here. However,
   // VerifyRSAPKCS1SignedDigest *is* responsible for doing the mathematical
   // verification of the public key validity as specified in NIST SP 800-56A.
-  Result VerifyRSAPKCS1SignedDigest(const SignedDigest& signedDigest,
-                                            Input subjectPublicKeyInfo) {
+  Result VerifyRSAPKCS1SignedDigest(const SignedDigest& signedDigest, Input subjectPublicKeyInfo) {
     std::cout << "VerifyRSA\n";
   	return Success;
   }
@@ -198,8 +186,7 @@ public:
   // so it is not necessary to repeat that check here. However,
   // VerifyECDSASignedDigest *is* responsible for doing the mathematical
   // verification of the public key validity as specified in NIST SP 800-56A.
-  Result VerifyECDSASignedDigest(const SignedDigest& signedDigest,
-                                         Input subjectPublicKeyInfo) {
+  Result VerifyECDSASignedDigest(const SignedDigest& signedDigest, Input subjectPublicKeyInfo) {
     std::cout << "VerifyECDSA\n";
   	return Success;
   }
@@ -222,8 +209,7 @@ public:
   // certificates. This function allows TrustDomain implementations to control
   // this setting based on the start of the validity period of the certificate
   // in question.
-  Result NetscapeStepUpMatchesServerAuth(Time notBefore,
-                                                 /*out*/ bool& matches) {
+  Result NetscapeStepUpMatchesServerAuth(Time notBefore, /*out*/ bool& matches) {
     std::cout << "NetscapeSteupUp\n";
   	return Success;
 }
@@ -232,8 +218,7 @@ public:
   // in the verification flow, but might still be of interest to the clients
   // (notably Certificate Transparency data, RFC 6962). Such extensions are
   // extracted and passed to this function for further processing.
-  void NoteAuxiliaryExtension(AuxiliaryExtension extension,
-                                      Input extensionData) {
+  void NoteAuxiliaryExtension(AuxiliaryExtension extension, Input extensionData) {
   	std::cout << "NoteAux\n";
   }
 
@@ -247,8 +232,7 @@ public:
   // TODO: Taking the output buffer as (uint8_t*, size_t) is counter to our
   // other, extensive, memory safety efforts in mozilla::pkix, and we should
   // find a way to provide a more-obviously-safe interface.
-  Result DigestBuf(Input item, DigestAlgorithm digestAlg,
-                           /*out*/ uint8_t* digestBuf, size_t digestBufLen) {
+  Result DigestBuf(Input item, DigestAlgorithm digestAlg, /*out*/ uint8_t* digestBuf, size_t digestBufLen) {
     std::cout << "DigestBuf\n";
   	return Success;
   }
@@ -351,16 +335,16 @@ const uint8_t entrust[] = {
 
 
 int main(int argc, char const *argv[]) {	
-	NSS_Init("/Users/chris/Documents/Contracting/mozilla/testWebSites/binlok/tar/ogar");
-	auto trustDomain = std::unique_ptr<MyWittleTrustDomain>(new MyWittleTrustDomain);
-  auto result = BuildCertChain(*trustDomain, Input(entrust), Now(),
+	NSS_Init("/Users/chris/Documents/Contracting/mozilla/testWebSites/bin/lok/tar/ogar");
+  MyWittleTwustDomain trustDomain;
+  auto result = BuildCertChain(trustDomain, Input(entrust), Now(),
                              EndEntityOrCA::MustBeEndEntity,
                              KeyUsage::noParticularKeyUsageRequired,
                              KeyPurposeId::id_kp_serverAuth,
                              CertPolicyId::anyPolicy,
                              nullptr);
   if (result != Success) {
-    std::cout << "well yeah, duh\n";
+    std::cout << "well yeah, duh " << MapResultToName(result) << "\n";
     return 1;
   }
 	return 0;
