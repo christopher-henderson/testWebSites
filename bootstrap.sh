@@ -34,3 +34,5 @@ cp dist/Debug/lib/libnss3.dylib bin
 cp dist/Debug/lib/libnssutil3.dylib bin
 cp dist/Debug/lib/libplc4.dylib bin
 cp dist/Debug/lib/libplds4.dylib bin
+cp dist/Debug/lib/libsoftokn3.dylib bin
+cp dist/Debug/lib/libnssdbm3.dylib bin

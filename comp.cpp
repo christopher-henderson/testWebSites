@@ -1,11 +1,13 @@
 #include <string>
 #include <iostream>
-#include "nss/nss.h"
-#include "nspr/prtypes.h"
+
 #include "mozpkix/pkixtypes.h"
 #include "mozpkix/Result.h"
 #include "mozpkix/Time.h"
 #include "mozpkix/pkix.h"
+#include "nspr/prerror.h"
+#include "nspr/prtypes.h"
+#include "nss/nss.h"
 
 using namespace mozilla::pkix;
 
@@ -26,7 +28,7 @@ public:
   // trustLevel == InheritsTrust instead of trustLevel == TrustAnchor
   // (assuming the candidate cert is not actively distrusted).
   Result GetCertTrust(EndEntityOrCA endEntityOrCA, const CertPolicyId& policy, Input candidateCertDER, /*out*/ TrustLevel& trustLevel) {
-    std::cout << "GetCertTrust\n";
+    std::cout << "GetCertTrust" << std::endl;
 		return Success;
 	}
 
@@ -77,7 +79,7 @@ public:
   // and/or validity period itself, then it is probably better for performance
   // for it to do so.
   Result FindIssuer(Input encodedIssuerName, IssuerChecker& checker, Time time) {
-    std::cout << "FindIssuer\n";
+    std::cout << "FindIssuer" << std::endl;
     bool keepGoing;
     auto result = checker.Check(encodedIssuerName, nullptr, keepGoing);
     if (result != Success) {
@@ -86,8 +88,8 @@ public:
     if (!keepGoing) {
       return Success;
     }
-    std::cout << "the checker goes " << MapResultToName(result) << "\n";
-    std::cout << "the checker thinks that I should " << (keepGoing ? "keep going" : "stop") << "\n";
+    std::cout << "the checker goes " << MapResultToName(result) << std::endl;
+    std::cout << "the checker thinks that I should " << (keepGoing ? "keep going" : "stop") << std::endl;
   	return Success;
   }
 
@@ -114,11 +116,11 @@ public:
   //
   // certChain.GetDER(0) is the trust anchor.
   Result IsChainValid(const DERArray& certChain, Time time, const CertPolicyId& requiredPolicy) {
-    std::cout << "IsChainValid\n";
+    std::cout << "IsChainValid" << std::endl;
     auto i = 0;
     auto der = certChain.GetDER(i);
     while (der != nullptr) {
-      std::cout << "a thing!\n";
+      std::cout << "a thing!" << std::endl;
       i++;
       der = certChain.GetDER(i);
     }
@@ -130,7 +132,7 @@ public:
                                  Duration validityDuration,
                                  /*optional*/ const Input* stapledOCSPresponse,
                                  /*optional*/ const Input* aiaExtension) {
-   std::cout << "CheckRevocation\n";
+   std::cout << "CheckRevocation" << std::endl;
    return Success;
   }
 
@@ -142,7 +144,7 @@ public:
   Result CheckSignatureDigestAlgorithm(DigestAlgorithm digestAlg,
                                                EndEntityOrCA endEntityOrCA,
                                                Time notBefore) {
-    std::cout << "CheckSignatureDigestAlgorithm\n";
+    std::cout << "CheckSignatureDigestAlgorithm" << std::endl;
   	return Success;
   }
 
@@ -152,7 +154,7 @@ public:
   // Result::ERROR_INADEQUATE_KEY_SIZE if the key size is not acceptable,
   // or another error code if another error occurred.
   Result CheckRSAPublicKeyModulusSizeInBits(EndEntityOrCA endEntityOrCA, unsigned int modulusSizeInBits) {
-    std::cout << "CheckRSAModulus\n";
+    std::cout << "CheckRSAModulus" << std::endl;
   	return Success;
   }
 
@@ -164,7 +166,7 @@ public:
   // VerifyRSAPKCS1SignedDigest *is* responsible for doing the mathematical
   // verification of the public key validity as specified in NIST SP 800-56A.
   Result VerifyRSAPKCS1SignedDigest(const SignedDigest& signedDigest, Input subjectPublicKeyInfo) {
-    std::cout << "VerifyRSA\n";
+    std::cout << "VerifyRSA" << std::endl;
   	return Success;
   }
 
@@ -175,7 +177,7 @@ public:
   // or another error code if another error occurred.
   Result CheckECDSACurveIsAcceptable(EndEntityOrCA endEntityOrCA,
                                              NamedCurve curve) {
-    std::cout << "CheckECDSA\n";
+    std::cout << "CheckECDSA" << std::endl;
   	return Success;
   }
 
@@ -187,7 +189,7 @@ public:
   // VerifyECDSASignedDigest *is* responsible for doing the mathematical
   // verification of the public key validity as specified in NIST SP 800-56A.
   Result VerifyECDSASignedDigest(const SignedDigest& signedDigest, Input subjectPublicKeyInfo) {
-    std::cout << "VerifyECDSA\n";
+    std::cout << "VerifyECDSA" << std::endl;
   	return Success;
   }
 
@@ -199,7 +201,7 @@ public:
   Result CheckValidityIsAcceptable(Time notBefore, Time notAfter,
                                            EndEntityOrCA endEntityOrCA,
                                            KeyPurposeId keyPurpose) {
-    std::cout << "CheckValidty\n";
+    std::cout << "CheckValidty" << std::endl;
   	return Success;
   }
 
@@ -210,7 +212,7 @@ public:
   // this setting based on the start of the validity period of the certificate
   // in question.
   Result NetscapeStepUpMatchesServerAuth(Time notBefore, /*out*/ bool& matches) {
-    std::cout << "NetscapeSteupUp\n";
+    std::cout << "NetscapeSteupUp" << std::endl;
   	return Success;
 }
 
@@ -219,7 +221,7 @@ public:
   // (notably Certificate Transparency data, RFC 6962). Such extensions are
   // extracted and passed to this function for further processing.
   void NoteAuxiliaryExtension(AuxiliaryExtension extension, Input extensionData) {
-  	std::cout << "NoteAux\n";
+  	std::cout << "NoteAux" << std::endl;
   }
 
   // Compute a digest of the data in item using the given digest algorithm.
@@ -233,7 +235,7 @@ public:
   // other, extensive, memory safety efforts in mozilla::pkix, and we should
   // find a way to provide a more-obviously-safe interface.
   Result DigestBuf(Input item, DigestAlgorithm digestAlg, /*out*/ uint8_t* digestBuf, size_t digestBufLen) {
-    std::cout << "DigestBuf\n";
+    std::cout << "DigestBuf" << std::endl;
   	return Success;
   }
 
@@ -333,19 +335,37 @@ const uint8_t entrust[] = {
 0x75, 0x19, 0x24, 0x0f, 0xa2, 0xbd, 0x8a, 0x2f, 0xd7, 0xf0, 0x4b, 0x70, 0xa0, 0x5a, 0x7b, 0xb3,
 0xcd};
 
+const char * cert_db_dir = "/Users/chris/mozilla-central/security/nss/tests/libpkix/sample_apps/";
+const char * my_dir = "/Users/chris/Documents/Contracting/mozilla/testWebSites/bin/lok/tar/ogar";
+
+void init_or_die(const char * directory) {
+	auto status = NSS_Init(directory);
+	if (status != SECSuccess) {
+		std::cout << "failed to init cert directory at " << directory << std::endl;
+		PRErrorCode err_code = PR_GetError();
+		auto err_text = std::unique_ptr<char>(new char);
+		auto bytes_read = PR_GetErrorText(err_text.get());
+		if (bytes_read != 0) {
+			std::cout << "The NSS INIT goes: " << err_text << std::endl;
+		} else {
+			std::cout << "got status " << err_code << " from NSS_Init but couldn't get the error text" << std::endl;
+		}
+		exit(err_code);
+	}
+}
 
 int main(int argc, char const *argv[]) {	
-	NSS_Init("/Users/chris/Documents/Contracting/mozilla/testWebSites/bin/lok/tar/ogar");
-  MyWittleTwustDomain trustDomain;
-  auto result = BuildCertChain(trustDomain, Input(entrust), Now(),
+	init_or_die(my_dir);
+  	MyWittleTwustDomain trustDomain;
+  	auto result = BuildCertChain(trustDomain, Input(entrust), Now(),
                              EndEntityOrCA::MustBeEndEntity,
                              KeyUsage::noParticularKeyUsageRequired,
                              KeyPurposeId::id_kp_serverAuth,
                              CertPolicyId::anyPolicy,
                              nullptr);
-  if (result != Success) {
-    std::cout << "well yeah, duh " << MapResultToName(result) << "\n";
-    return 1;
-  }
+  	if (result != Success) {
+    	std::cout << "well yeah, duh " << MapResultToName(result) << std::endl;
+    	return 1;
+  	}
 	return 0;
 }
