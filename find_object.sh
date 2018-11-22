@@ -1,6 +1,8 @@
 #/usr/bin/env bash
 
-# And just to be thorough scrape through looking for the right symbol.
+# This helped me figure our what libraries things were getting dumped to without
+# having to dig into the build system too much.
+
 for lib in $(find dist/Debug/lib -name *.dylib); do
 	objdump -D $lib | grep $1:; 
 	if [ $? -eq 0 ]
