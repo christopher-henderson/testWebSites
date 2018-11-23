@@ -1,5 +1,6 @@
 #include <string>
 #include <iostream>
+#include <vector>
 
 #include "mozpkix/pkixtypes.h"
 #include "mozpkix/Result.h"
@@ -7,6 +8,7 @@
 #include "mozpkix/pkix.h"
 #include "nspr/prerror.h"
 #include "nspr/prtypes.h"
+#include "nss/cert.h"
 #include "nss/nss.h"
 
 using namespace mozilla::pkix;
@@ -82,15 +84,38 @@ public:
     std::cout << "FindIssuer" << std::endl;
     bool keepGoing;
     auto result = checker.Check(encodedIssuerName, nullptr, keepGoing);
+    std::cout << "the checker goes " << MapResultToName(result) << std::endl;
+    std::cout << "the checker thinks that I should " << (keepGoing ? "keep going" : "stop") << std::endl;
     if (result != Success) {
       return result;
     }
     if (!keepGoing) {
       return Success;
     }
-    std::cout << "the checker goes " << MapResultToName(result) << std::endl;
-    std::cout << "the checker thinks that I should " << (keepGoing ? "keep going" : "stop") << std::endl;
-  	return Success;
+    // Is this the right approach at all? I would like to get a handle
+    // on the root store and query it for all of the certs associated
+    // with this issuer.
+    auto db = CERT_GetDefaultCertDB();
+    SECItem name{
+    	siDERNameBuffer, 
+    	(unsigned char *)encodedIssuerName.UnsafeGetData(),
+    	encodedIssuerName.GetLength()};
+    // Okay, so this returns null. Do I need to decode the name?
+    // Am I pointing to an incomplete DB? If so, How do I point to Firefox's DB?
+    // All of the cert.db I find in mozilla-central are in test directories, so I
+    // presume they are not representative.
+    auto cert = CERT_FindCertByName(db, &name);
+    if (cert == nullptr) {
+    	std::cout << "feels bad man" << std::endl;
+    	return Result::ERROR_UNKNOWN_ISSUER;
+    }
+    uint8_t issuerName[cert->derIssuer.len];
+    memcpy(issuerName, cert->derIssuer.data, cert->derIssuer.len);
+    Input i;
+    i.Init(issuerName, cert->derIssuer.len);
+    result = checker.Check(i, nullptr, keepGoing);
+    std::cout << (result == Success) << std::endl;
+    return Success;
   }
 
   // Called as soon as we think we have a valid chain but before revocation
@@ -117,12 +142,10 @@ public:
   // certChain.GetDER(0) is the trust anchor.
   Result IsChainValid(const DERArray& certChain, Time time, const CertPolicyId& requiredPolicy) {
     std::cout << "IsChainValid" << std::endl;
-    auto i = 0;
-    auto der = certChain.GetDER(i);
-    while (der != nullptr) {
-      std::cout << "a thing!" << std::endl;
-      i++;
-      der = certChain.GetDER(i);
+    const Input * der;
+    int i = 0;
+    while (nullptr != (der = certChain.GetDER(i++))) {
+      std::cout << der->UnsafeGetData() << std::endl;
     }
   	return Success;
   }
@@ -337,6 +360,7 @@ const uint8_t entrust[] = {
 
 const char * cert_db_dir = "/Users/chris/mozilla-central/security/nss/tests/libpkix/sample_apps/";
 const char * my_dir = "/Users/chris/Documents/Contracting/mozilla/testWebSites/bin/lok/tar/ogar";
+const char * firefox = "/Users/chris/Library/Application Support/Firefox/Profiles/ksjv675z.default";
 
 void init_or_die(const char * directory) {
 	auto status = NSS_Init(directory);
@@ -354,8 +378,10 @@ void init_or_die(const char * directory) {
 	}
 }
 
+
+
 int main(int argc, char const *argv[]) {	
-	init_or_die(my_dir);
+	init_or_die(firefox);
   	MyWittleTwustDomain trustDomain;
   	auto result = BuildCertChain(trustDomain, Input(entrust), Now(),
                              EndEntityOrCA::MustBeEndEntity,

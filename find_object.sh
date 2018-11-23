@@ -4,7 +4,7 @@
 # having to dig into the build system too much.
 
 for lib in $(find dist/Debug/lib -name *.dylib); do
-	objdump -D $lib | grep $1:; 
+	objdump --arch-name=x86-64 -D $lib | grep $1:; 
 	if [ $? -eq 0 ]
 	then
 		echo "See? It's totally in $lib"
