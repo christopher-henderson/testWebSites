@@ -1,137 +1,99 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"os/exec"
-	"path"
-	"strings"
-
-	"github.com/mozilla/OneCRL-Tools/certdataDiffCCADB"
 
 	"service/certutil"
+
+	"github.com/mozilla/OneCRL-Tools/certdataDiffCCADB"
 )
 
 type Result struct {
 	Results []string `json:"result"`
 }
 
-func toCertList(r io.Reader) []string {
-	buf, err := ioutil.ReadAll(r)
-	if err != nil {
-		log.Panic("asds")
-	}
-	return strings.SplitAfter(string(buf), "-----END CERTIFICATE-----")
-}
-
-func writeProvidedChainToDisk(cert string) string {
-	f, err := ioutil.TempFile("/Users/chris/Documents/Contracting/mozilla/testWebSites/getcerts/certChains", "")
-	if err != nil {
-		err = errors.New(err.Error())
-		log.Panicln(err)
-	}
-	defer f.Close()
-	_, err = fmt.Fprintln(f, cert)
-	if err != nil {
-		log.Panicln(err)
-	}
-	return f.Name()
-}
-
-func install(cert string) string {
-	// $CERTUTIL -A -n letsencrypt.org -t "P,p,p" -i wwwletsencryptorg.crt  -d testdb
-	fname := writeProvidedChainToDisk(certdataDiffCCADB.NormalizePEM(cert))
-	nickname := path.Base(fname)
-	cmd := exec.Command(certutilBin, "-A", "-n", nickname, "-t", `P,p,p`, "-i", fname, "-d", db)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Println(cert)
-		log.Println(cmd.Args)
-		log.Println(fname)
-		log.Println(string(out))
-		log.Panicln(err)
-	}
-	log.Println(cmd.Args)
-	return fname
-}
-
-func uninstall(nickname string) {
-	cmd := exec.Command(certutilBin, "-D", "-n", nickname, "-d", db)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Println(cmd.Args)
-		log.Println(string(out))
-		log.Panicln(err)
-	}
-}
-
-func verify(nickname string) string {
-	// -V -n letsencrypt.org -u V -d testdb/
-	cmd := exec.Command(certutilBin, "-V", "-n", nickname, "-u", "V", "-d", db)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Println(cmd.Args)
-		log.Println(string(out))
-		log.Panicln(err)
-	}
-	return string(out)
-}
-
 func handler(resp http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
-	certs := toCertList(req.Body)
-	var r Result
-	// lol no fixit
-	for _, cert := range certs[:len(certs)-1] {
-		nickname := install(cert)
-		defer uninstall(path.Base(nickname))
-		result := verify(path.Base(nickname))
-		r.Results = append(r.Results, result)
+	s, ok := req.URL.Query()["subject"]
+	if !ok {
+		resp.WriteHeader(400)
+		resp.Write([]byte("'subject' query parameter is required\n"))
+		return
 	}
-	err := json.NewEncoder(resp).Encode(r)
+	subject := s[0]
+	caCertRaw, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		log.Panicln(err)
+		resp.WriteHeader(400)
+		resp.Write([]byte("Error reading body: " + string(caCertRaw)))
+		return
+	}
+	// @TODO validate provided CA cert
+	req.Body.Close()
+	caCert, err := parseX509(caCertRaw)
+	if err != nil {
+		resp.WriteHeader(400)
+		resp.Write([]byte("Bad PEM: " + err.Error()))
+		return
+	}
+	chain, err := gatherCertificates(string(subject))
+	if err != nil {
+		resp.WriteHeader(400)
+		resp.Write([]byte("Could not retrieve certificate chain from " + string(subject) + " because of " + err.Error()))
+		return
+	}
+	chain = append(chain, caCert)
+	c, err := certutil.NewCertutil()
+	if err != nil {
+		resp.WriteHeader(500)
+		fmt.Fprintln(resp, err.Error())
+	}
+	for _, cert := range chain {
+		_, err := c.Install(cert)
+		if err != nil {
+			resp.Write([]byte(err.Error() + "\n"))
+			continue
+		}
+		answer, err := c.Verify(cert)
+		if err != nil {
+			fmt.Fprintln(resp, string(answer)+" "+cert.Subject.String())
+			continue
+		}
+		fmt.Fprintln(resp, string(answer))
 	}
 }
 
-func initDB() {
-	if err := os.RemoveAll(db); err != nil {
-		log.Panicln(err)
-	}
-	if err := os.Mkdir(db, 0777); err != nil {
-		log.Panicln(err)
-	}
-	cmd := exec.Command(certutilBin, "-N", "-d", db)
-	out, err := cmd.CombinedOutput()
+func gatherCertificates(subjectURL string) ([]*x509.Certificate, error) {
+	resp, err := http.DefaultClient.Get(subjectURL)
 	if err != nil {
-		log.Println(cmd.Args)
-		log.Println(string(out))
-		log.Panicln(err)
+		return []*x509.Certificate{}, err
 	}
+	return resp.TLS.PeerCertificates, err
 }
 
-const certutilBin = "/Users/chris/Documents/Contracting/mozilla/testWebSites/dist/Debug/bin/certutil"
-const db = "/Users/chris/Documents/Contracting/mozilla/testWebSites/testdb"
+func parseX509(cert []byte) (*x509.Certificate, error) {
+	cert = []byte(certdataDiffCCADB.NormalizePEM(string(cert)))
+	block, _ := pem.Decode(cert)
+	return x509.ParseCertificate(block.Bytes)
+}
 
 const DB = "/Users/chris/Documents/Contracting/mozilla/testWebSites/testdb"
+
+// @TODO I can't seem to get this to fail intentionally, be careful
 const DIST = "/Users/chris/Documents/Contracting/mozilla/testWebSites/dist/Debug"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	certutil.Init(DB, DIST)
-	out, err := certutil.Execute([]string{"-V", "-n", "expiredec.entrust.net", "-u", "V", "-d", DB})
-	log.Println(out)
-	log.Println(err)
-	// os.Setenv("DYLD_LIBRARY_PATH", os.ExpandEnv("$DYLD_LIBRARY_PATH:/Users/chris/Documents/Contracting/mozilla/testWebSites/dist/Debug/lib"))
-	// log.Println(os.Getenv("DYLD_LIBRARY_PATH"))
-	// r := mux.NewRouter()
-	// r.Methods("POST").HandleFunc("/verify_provided_chain", ProductHandler)
-	// initDB()
-	// http.ListenAndServe("0.0.0.0:8000", http.HandlerFunc(handler))
+	err := certutil.Init(DB, DIST)
+	if err != nil {
+		log.Panicln(err)
+	}
+	http.HandleFunc("/", handler)
+	if err := http.ListenAndServe("0.0.0.0:8080", nil); err != nil {
+		log.Panicln(err)
+	}
 }

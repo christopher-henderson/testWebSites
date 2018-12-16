@@ -1,84 +1,92 @@
 package certutil
 
 import (
-	"errors"
-	"io"
+	"bytes"
+	"crypto/x509"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path"
-	"strings"
-	"sync"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	NewCertificateDatabase = "-N"
+	NoPassword             = "--empty-password"
+	CertDbDirectory        = "-d"
+
+	InstallCert        = "-A"
+	CertName           = "-n"
+	TrustArgs          = "-t"
+	TrustSSLServerOnly = "P,p,p"
+
+	Verify    = "-V"
+	CertUsage = "-u"
+	SSLServer = "V"
 )
 
 var executable = "certutil"
-
 var db string
 
-func Init(dbDir string, dist string) {
+func Init(dbDir string, dist string) error {
 	db = dbDir
 	ldpath := os.Getenv(LIBRARY_PATH)
 	ldpath = ldpath + ":" + path.Join(dist, "lib")
 	os.Setenv(LIBRARY_PATH, ldpath)
 	binPath := os.Getenv("PATH")
 	os.Setenv("PATH", binPath+":"+path.Join(dist, "bin"))
-}
-
-func Install(cert string) error {
+	help, err := execute([]string{})
+	if !bytes.Contains(help, []byte("certutil - Utility to manipulate NSS certificate databases")) {
+		return errors.Wrap(err, fmt.Sprintf("Failed to load '%s' given the PATH=%s\n$ certutil\n%s", executable, os.Getenv("PATH"), string(help)))
+	}
 	return nil
 }
 
-func Delete(nickame string) error {
-
+type Certutil struct {
+	tmpDir string
 }
 
-func Verify(nickname string) error {
-
+func NewCertutil() (certutil Certutil, err error) {
+	tmpDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		return
+	}
+	certutil.tmpDir = tmpDir
+	out, err := execute([]string{NewCertificateDatabase, NoPassword, CertDbDirectory, certutil.tmpDir})
+	if err != nil {
+		log.Println(string(out))
+	}
+	return
 }
 
-func Execute(args []string, input ...string) (string, error) {
+func (c Certutil) Install(cert *x509.Certificate) ([]byte, error) {
+	return execute([]string{
+		InstallCert,
+		TrustArgs, TrustSSLServerOnly,
+		CertName, cert.Subject.String(),
+		CertDbDirectory, c.tmpDir,
+	}, cert.Raw...)
+}
+
+func (c Certutil) Verify(cert *x509.Certificate) ([]byte, error) {
+	return execute([]string{
+		Verify,
+		CertName, cert.Subject.String(),
+		CertUsage, SSLServer,
+		CertDbDirectory, c.tmpDir,
+	})
+}
+
+func (c Certutil) Delete() {
+	os.RemoveAll(c.tmpDir)
+}
+
+func execute(args []string, input ...byte) ([]byte, error) {
 	cmd := exec.Command(executable, args...)
-	wg := sync.WaitGroup{}
-	outR, outW := io.Pipe()
-	errR, errW := io.Pipe()
-	inR, inW := io.Pipe()
-	cmd.Stdout = outW
-	cmd.Stderr = errW
-	cmd.Stdin = inR
-	var stderr []byte
-	var stdout []byte
-	var errErr error
-	var outErr error
-	wg.Add(3)
-	go func() {
-		stderr, errErr = ioutil.ReadAll(errR)
-		wg.Done()
-	}()
-	go func() {
-		stdout, outErr = ioutil.ReadAll(outR)
-		wg.Done()
-	}()
-	go func() {
-		newLineDelimitedInput := strings.Join(input, "\n")
-		io.Copy(inW, strings.NewReader(newLineDelimitedInput))
-		inW.Close()
-		wg.Done()
-	}()
-	cmdErr := cmd.Run()
-	outW.Close()
-	errW.Close()
-	wg.Wait()
-	// @TODO do something better with these
-	// It's awkward but these would be big explosions
-	if errErr != nil {
-		log.Println(errErr, cmdErr)
-	}
-	if outErr != nil {
-		log.Println(outErr)
-	}
-	if len(stderr) > 0 {
-		return "", errors.New(string(stderr))
-	}
-	return string(stdout), nil
+	cmd.Stdin = bytes.NewBuffer(input)
+	out, err := cmd.CombinedOutput()
+	return bytes.TrimSpace(out), err
 }

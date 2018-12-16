@@ -1,6 +1,9 @@
 package certutil
 
+import "crypto/x509"
+
 type Certificate struct {
-	PEM      string
-	Nickname string
+	PEM                 x509.Certificate
+	NSSValidationResult string
+	NSSError            error
 }
